@@ -1,2 +1,2 @@
-# paralell_programming
+# Paralell Programming
 Excercise for Paralell Programming
