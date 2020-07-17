@@ -1,5 +1,9 @@
+%%cu
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
+
+using namespace std;
 
 #define CHECK(call)                                                            \
 {                                                                              \
@@ -104,12 +108,37 @@ void writePnm(uchar3 * pixels, int width, int height, char * fileName)
 	fclose(f);
 }
 
-__global__ void blurImgKernel(uchar3 * inPixels, int width, int height, 
-							float * filter, int filterWidth, 
-							uchar3 * outPixels)
+__global__ void blurImgKernel(uchar3 *inPixels, int width, int height, 
+							float *filter, int filterWidth, 
+							uchar3 *outPixels)
 {
 	// TODO
-	
+	int r = blockIdx.y * blockDim.y + threadIdx.y;
+	int c = blockIdx.x * blockDim.x + threadIdx.x;
+	if (r < height && c < width)
+	{
+		int i = r * width + c;
+		float3 outPixel = make_float3(0, 0, 0);
+		for (int fR = 0; fR < filterWidth; fR++)
+		{
+			for (int fC = 0; fC < filterWidth; fC++)
+			{
+				float filterVal = filter[fR * filterWidth + fC];
+
+				int inPixelsR = (r - filterWidth/2) + fR;
+				int inPixelsC = (c - filterWidth/2) + fC;
+				inPixelsR = min(height - 1, max(0, inPixelsR)); 
+				inPixelsC = min(width - 1, max(0, inPixelsC)); 
+				uchar3 inPixel = inPixels[inPixelsR * width + inPixelsC];
+				
+				outPixel.x += filterVal * inPixel.x;
+				outPixel.y += filterVal * inPixel.y;
+				outPixel.z += filterVal * inPixel.z;
+			}
+		}
+
+		outPixels[i] = make_uchar3(outPixel.x, outPixel.y, outPixel.z);
+	}
 }
 
 void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filterWidth, 
@@ -148,12 +177,37 @@ void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filte
 	}
 	else // Use device
 	{
+		// Chọn GPU thực thi câu lệnh    
+		int dev = 0;
 		cudaDeviceProp devProp;
-		cudaGetDeviceProperties(&devProp, 0);
+		cudaGetDeviceProperties(&devProp, dev);
 		printf("GPU name: %s\n", devProp.name);
 		printf("GPU compute capability: %d.%d\n", devProp.major, devProp.minor);
 
 		// TODO
+		// Allocate device memories
+		uchar3 *d_inPixels, *d_outPixels;
+		float *d_filter;
+		CHECK(cudaMalloc(&d_inPixels, width * height * 3 * sizeof(uchar3)));
+		CHECK(cudaMalloc(&d_outPixels, width * height * 3 * sizeof(uchar3)));
+		CHECK(cudaMalloc(&d_filter, filterWidth * filterWidth * sizeof(float)));
+
+		// Copy data to device memory
+		CHECK(cudaMemcpy(d_inPixels, inPixels, width * height * 3 * sizeof(uchar3), cudaMemcpyHostToDevice));
+		CHECK(cudaMemcpy(d_filter, filter, filterWidth * filterWidth * sizeof(float), cudaMemcpyHostToDevice));
+
+		// Call kernel
+		dim3 gridSize((width - 1) / blockSize.x + 1, (height - 1) / blockSize.y + 1);
+		blurImgKernel<<<gridSize, blockSize>>>(d_inPixels, width, height, d_filter, filterWidth, d_outPixels);
+		
+
+		// Copy result from device memory
+		CHECK(cudaMemcpy(outPixels, d_outPixels, width * height * sizeof(uchar3), cudaMemcpyDeviceToHost));
+
+		// Free device memories
+		CHECK(cudaFree(d_inPixels));
+		CHECK(cudaFree(d_outPixels));
+		CHECK(cudaFree(d_filter));
 	}
 	timer.Stop();
 	float time = timer.Elapsed();
@@ -182,8 +236,12 @@ char * concatStr(const char * s1, const char * s2)
     return result;
 }
 
-int main(int argc, char ** argv)
+//int argc, char ** argv
+int main()
 {
+	int argc = 5;
+	char argv[5][255] = { "./bt1", "/content/in.pnm", "/content/out.pnm", "32", "32" };
+	
 	if (argc !=3 && argc != 5)
 	{
 		printf("The number of arguments is invalid\n");
@@ -196,9 +254,9 @@ int main(int argc, char ** argv)
 	readPnm(argv[1], width, height, inPixels);
 	printf("Image size (width x height): %i x %i\n\n", width, height);
 
-	// Set up a simple filter with blurring effect 
+	// Set up a simple filter with blurring effect
 	int filterWidth = 9;
-	float * filter = (float *)malloc(filterWidth * filterWidth * sizeof(float));
+	float *filter = (float *)malloc(filterWidth * filterWidth * sizeof(float));
 	for (int filterR = 0; filterR < filterWidth; filterR++)
 	{
 		for (int filterC = 0; filterC < filterWidth; filterC++)
@@ -218,15 +276,16 @@ int main(int argc, char ** argv)
 	{
 		blockSize.x = atoi(argv[3]);
 		blockSize.y = atoi(argv[4]);
-	}  
+	}
 	blurImg(inPixels, width, height, filter, filterWidth, outPixels, true, blockSize);
 
 	// Compute mean absolute error between host result and device result
 	float err = computeError(outPixels, correctOutPixels, width * height);
 	printf("Error between device result and host result: %f\n", err);
 
-    // Write results to files
-    char * outFileNameBase = strtok(argv[2], "."); // Get rid of extension
+	// Write results to files
+	char *outFileNameBase = strtok(argv[2], "."); // Get rid of extension
+	printf("outFileNameBase : %s", outFileNameBase);
 	writePnm(correctOutPixels, width, height, concatStr(outFileNameBase, "_host.pnm"));
 	writePnm(outPixels, width, height, concatStr(outFileNameBase, "_device.pnm"));
 
