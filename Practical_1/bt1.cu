@@ -106,8 +106,7 @@ void writePnm(uchar3 * pixels, int width, int height, char * fileName)
 
 __global__ void blurImgKernel(uchar3 * inPixels, int width, int height, 
 							float * filter, int filterWidth, 
-							uchar3 * outPixels)
-{
+							uchar3 * outPixels){
 	// TODO
 	int r = blockIdx.y * blockDim.y + threadIdx.y;
 	int c = blockIdx.x * blockDim.x + threadIdx.x;
@@ -194,7 +193,6 @@ void blurImg(uchar3 * inPixels, int width, int height, float * filter, int filte
 		dim3 gridSize((width - 1) / blockSize.x + 1, (height - 1) / blockSize.y + 1);
 		blurImgKernel<<<gridSize, blockSize>>>(d_inPixels, width, height, d_filter, filterWidth, d_outPixels);
 		
-
 		// Copy result from device memory
 		CHECK(cudaMemcpy(outPixels, d_outPixels, width * height * sizeof(uchar3), cudaMemcpyDeviceToHost));
 
