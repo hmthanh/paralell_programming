@@ -94,14 +94,14 @@ __global__ void reduceBlksKernel3(int * in, int n, int * out)
     
     for (int stride = blockDim.x; stride > 0; stride >>= 1)
     {
-        int i = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+        int i = numElemsBeforeBlk + threadIdx.x;
         if (threadIdx.x < stride)
             in[i] += in[i + stride];
 
         __syncthreads();
     }
     if (threadIdx.x == 0)
-        out[blockIdx.x] = in[blockIdx.x * blockDim.x * 2];
+        out[blockIdx.x] = in[numElemsBeforeBlk];
 }
 
 int reduce(int const * in, int n,
