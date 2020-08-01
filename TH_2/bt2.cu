@@ -73,7 +73,6 @@ __global__ void reduceBlksKernel2(int * in, int n, int * out)
     for (int stride = 1; stride < 2 * blockDim.x; stride *= 2)
     {
         int i = numElemsBeforeBlk + threadIdx.x * 2 * stride;
-        //int index = 2 * stride * tid;
         if (threadIdx.x < blockDim.x / stride){
             if (i + stride < n){
                 in[i] += in[i + stride];
