@@ -1,4 +1,6 @@
-%%cu
+/*
+Baseline 1 : Thuật toán Radix Sort tuần tự
+*/
 #include <stdio.h>
 #include <stdint.h>
 
@@ -51,13 +53,13 @@ struct GpuTimer
     }
 };
 
-// Sequential Radix Sort
+// Base 1
 void sortByHost(const uint32_t * in, int n,
                 uint32_t * out)
 {
 
-    int nBits = 4; // Assume: nBits in {1, 2, 4, 8, 16} = k
-    int nBins = 1 << nBits; // 2^nBits = size bit
+    int nBits = 1; // Assume: nBits in {1, 2, 4, 8, 16}
+    int nBins = 1 << nBits; // 2^nBits
 
     int * hist = (int *)malloc(nBins * sizeof(int));
     int * histScan = (int *)malloc(nBins * sizeof(int));
@@ -68,32 +70,32 @@ void sortByHost(const uint32_t * in, int n,
 
     // Loop from LSD (Least Significant Digit) to MSD (Most Significant Digit)
     // (Each digit consists of nBits bit)
-	// In each loop, sort elements according to the current digit from src to dst 
-	// (using STABLE counting sort)
+    // In each loop, sort elements according to the current digit from src to dst 
+    // (using STABLE counting sort)
     for (int bit = 0; bit < sizeof(uint32_t) * 8; bit += nBits)
     {
-    	// TODO: Compute histogram
+        // TODO: Compute histogram
         memset(hist, 0, nBins * sizeof(int));
-        for (int i = 0; i < n; i++){
-            int bin = (src[i] >> nBits) & (1 << nBins - 1);
+        for (int i = 0; i < n; i++)
+        {
+            int bin = (src[i] >> bit) & (nBins - 1);
             hist[bin]++;
         }
 
-    	// TODO: Scan histogram (exclusively)
+        // TODO: Scan histogram (exclusively)
         histScan[0] = 0;
-        for (int bin = 1; bin < nBins; bin++){
+        for (int bin = 1; bin < nBins; bin++)
             histScan[bin] = histScan[bin - 1] + hist[bin - 1];
-        }
 
-
-    	// TODO: Scatter elements to correct locations
-        for (int i = 0; i < n; i++){
-            int bin = (src[i] >> nBits) & (1 << nBins - 1);
-            out[histScan[bin]] = in[i];
+        // TODO: Scatter elements to correct locations
+        for (int i = 0; i < n; i++)
+        {
+            int bin = (src[i] >> bit) & (nBins - 1);
+            dst[histScan[bin]] = src[i];
             histScan[bin]++;
         }
-    	
-    	// Swap src and dst
+        
+        // Swap src and dst
         uint32_t * temp = src;
         src = dst;
         dst = temp;
@@ -107,6 +109,51 @@ void sortByHost(const uint32_t * in, int n,
 void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
 {
     // TODO
+    int nBits = 1; // Assume: nBits in {1, 2, 4, 8, 16}
+    int nBins = 1 << nBits; // 2^nBits
+
+    int * hist = (int *)malloc(nBins * sizeof(int));
+    int * histScan = (int *)malloc(nBins * sizeof(int));
+
+    uint32_t * src = (uint32_t *)malloc(n * sizeof(uint32_t));
+    memcpy(src, in, n * sizeof(uint32_t));
+    uint32_t * dst = out;
+
+    // Loop from LSD (Least Significant Digit) to MSD (Most Significant Digit)
+    // (Each digit consists of nBits bit)
+    // In each loop, sort elements according to the current digit from src to dst 
+    // (using STABLE counting sort)
+    for (int bit = 0; bit < sizeof(uint32_t) * 8; bit += nBits)
+    {
+        // TODO: Compute histogram
+        memset(hist, 0, nBins * sizeof(int));
+        for (int i = 0; i < n; i++)
+        {
+            int bin = (src[i] >> bit) & (nBins - 1);
+            hist[bin]++;
+        }
+
+        // TODO: Scan histogram (exclusively)
+        histScan[0] = 0;
+        for (int bin = 1; bin < nBins; bin++)
+            histScan[bin] = histScan[bin - 1] + hist[bin - 1];
+
+        // TODO: Scatter elements to correct locations
+        for (int i = 0; i < n; i++)
+        {
+            int bin = (src[i] >> bit) & (nBins - 1);
+            dst[histScan[bin]] = src[i];
+            histScan[bin]++;
+        }
+        
+        // Swap src and dst
+        uint32_t * temp = src;
+        src = dst;
+        dst = temp;
+    }
+
+    // Copy result to out
+   memcpy(out, src, n * sizeof(uint32_t)); 
 }
 
 // Radix Sort
@@ -114,17 +161,17 @@ void sort(const uint32_t * in, int n,
         uint32_t * out, 
         bool useDevice=false, int blockSize=1)
 {
-    GpuTimer timer;
+    GpuTimer timer; 
     timer.Start();
 
     if (useDevice == false)
     {
-    	printf("\nRadix Sort by host\n");
+        printf("\nRadix Sort by host\n");
         sortByHost(in, n, out);
     }
     else // use device
     {
-    	printf("\nRadix Sort by device\n");
+        printf("\nRadix Sort by device\n");
         sortByDevice(in, n, out, blockSize);
     }
 
@@ -174,7 +221,7 @@ int main(int argc, char ** argv)
     printDeviceInfo();
 
     // SET UP INPUT SIZE
-    int n = 10; // For test by eye
+    int n = (1 << 24) + 1; // For test by eye
     //int n = (1 << 24) + 1;
     printf("\nInput size: %d\n", n);
 
@@ -190,7 +237,7 @@ int main(int argc, char ** argv)
         in[i] = rand() % 255; // For test by eye
         //in[i] = rand();
     }
-    printArray(in, n); // For test by eye
+    //printArray(in, n); // For test by eye
 
     // DETERMINE BLOCK SIZE
     int blockSize = 512; // Default 
@@ -199,7 +246,7 @@ int main(int argc, char ** argv)
 
     // SORT BY HOST
     sort(in, n, correctOut);
-    printArray(correctOut, n);
+    //printArray(correctOut, n);
     
     // SORT BY DEVICE
     sort(in, n, out, true, blockSize);

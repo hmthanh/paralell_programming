@@ -1,6 +1,8 @@
-%%cu
 #include <stdio.h>
 #include <stdint.h>
+#include <thrust/device_vector.h>
+#include <thrust/copy.h>
+#include <thrust/sort.h>
 
 #define CHECK(call)                                                            \
 {                                                                              \
@@ -92,7 +94,6 @@ void sortByHost(const uint32_t * in, int n,
             dst[histScan[bin]] = src[i];
             histScan[bin]++;
         }
-
     	
     	// Swap src and dst
         uint32_t * temp = src;
@@ -108,6 +109,9 @@ void sortByHost(const uint32_t * in, int n,
 void sortByDevice(const uint32_t * in, int n, uint32_t * out, int blockSize)
 {
     // TODO
+    thrust::device_vector<uint32_t> dv_out(in, in + n);
+    thrust::sort(dv_out.begin(), dv_out.end());
+    thrust::copy(dv_out.begin(), dv_out.end(), out);
 }
 
 // Radix Sort
